@@ -20,15 +20,15 @@ validationData$USERID <- as.factor(validationData$USERID)
 validationData$PHONEID <- as.factor(validationData$PHONEID)
 validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
 
-# combine data
-trainingData <- bind_rows(trainingData, validationData)
+# combine data # only for final test
+#trainingData <- bind_rows(trainingData, validationData)
 
-str(trainingData[520:529])
-trainingData$SPACEID <- as.factor(trainingData$SPACEID)
-trainingData$RELATIVEPOSITION <- as.factor(trainingData$RELATIVEPOSITION)
-trainingData$USERID <- as.factor(trainingData$USERID)
-trainingData$PHONEID <- as.factor(trainingData$PHONEID)
-rm("validationData")
+#str(trainingData[520:529])
+#trainingData$SPACEID <- as.factor(trainingData$SPACEID)
+#trainingData$RELATIVEPOSITION <- as.factor(trainingData$RELATIVEPOSITION)
+#trainingData$USERID <- as.factor(trainingData$USERID)
+#trainingData$PHONEID <- as.factor(trainingData$PHONEID)
+#rm("validationData")
 
 # NA
 sum(is.na(trainingData), na.rm = TRUE)
@@ -358,7 +358,7 @@ gc()
 validationData[validationData == 100] <- -100
 
 
-#normalize test
+#normalize test ## didnt work ##
 #Data_T0[Data_T0 == -100] <- NA
 #WAPs <- grep("WAP", names(Data_T0), value=T)
 #Data_T01 <- Data_T0[, WAPs]
@@ -367,26 +367,26 @@ validationData[validationData == 100] <- -100
 
 #Data_T0[is.na(Data_T0)] <- -100
 
-# test set pre processing
-validationData <- read_csv("C:/Users/FDL_4/OneDrive/Escritorio/Course/Module 4/Task 1/UJIndoorLoc/Copy of Copy of testData - Copy of Copy of testData.csv")
-View(validationData)
-str(validationData[520:529])
+# test set pre processing for final test ##
+#validationData <- read_csv("C:/Users/FDL_4/OneDrive/Escritorio/Course/Module 4/Task 1/UJIndoorLoc/Copy of Copy of testData - Copy of Copy of testData.csv")
+#View(validationData)
+#str(validationData[520:529])
 
-validationData$FLOOR <- as.factor(validationData$FLOOR)
-validationData$BUILDINGID <- as.factor(validationData$BUILDINGID)
-validationData$SPACEID <- as.factor(validationData$SPACEID)
-validationData$RELATIVEPOSITION <- as.factor(validationData$RELATIVEPOSITION)
-validationData$USERID <- as.factor(validationData$USERID)
-validationData$PHONEID <- as.factor(validationData$PHONEID)
-validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
+#validationData$FLOOR <- as.factor(validationData$FLOOR)
+#validationData$BUILDINGID <- as.factor(validationData$BUILDINGID)
+#validationData$SPACEID <- as.factor(validationData$SPACEID)
+#validationData$RELATIVEPOSITION <- as.factor(validationData$RELATIVEPOSITION)
+#validationData$USERID <- as.factor(validationData$USERID)
+#validationData$PHONEID <- as.factor(validationData$PHONEID)
+#validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
 
-WAPs <- grep("WAP", names(validationData), value=T)
-validationData1 <- validationData[, WAPs]
-validationData1[validationData1 == 100] <- NA
-validationData1[validationData1 < a] <- a
-validationData1[validationData1 > -29] <- -29
-validationData <- cbind(validationData1, validationData[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
-                                                            "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
-validationData[is.na(validationData)] <- -100
+#WAPs <- grep("WAP", names(validationData), value=T)
+#validationData1 <- validationData[, WAPs]
+#validationData1[validationData1 == 100] <- NA
+#validationData1[validationData1 < a] <- a
+#validationData1[validationData1 > -29] <- -29
+#validationData <- cbind(validationData1, validationData[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
+#                                                            "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
+#validationData[is.na(validationData)] <- -100
 
 
