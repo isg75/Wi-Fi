@@ -1,6 +1,14 @@
+#### Ignacio: Missing loading of libraries!!!
+library(readr)
+library(dplyr)
+library(magrittr)
+library(lubridate)
+#library(anytime)
+####
+
 # Load data
-trainingData <- read_csv("C:/Users/FDL_4/OneDrive/Escritorio/Course/Module 4/Task 1/UJIndoorLoc/trainingData.csv")
-validationData <- read_csv("C:/Users/FDL_4/OneDrive/Escritorio/Course/Module 4/Task 1/UJIndoorLoc/validationData.csv")
+trainingData   <- read_csv("UBIQUM/MENTOR/DA119/DATA/trainingData.csv")
+validationData <- read_csv("UBIQUM/MENTOR/DA119/DATA/validationData.csv")
 
 # Pre processing ####
 # feature type
@@ -19,6 +27,17 @@ validationData$RELATIVEPOSITION <- as.factor(validationData$RELATIVEPOSITION)
 validationData$USERID <- as.factor(validationData$USERID)
 validationData$PHONEID <- as.factor(validationData$PHONEID)
 validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
+
+#### Ignacio: A better way to do it. 
+#### In this way you do two things in one:
+#### You prevent typing too much.
+#### You can apply the same function on training and validation sets.
+preproc <- function(df) {
+  cols <- c("FLOOR","BUILDINGID","SPACEID","RELATIVEPOSITION","USERID","PHONEID")
+  df %<>% mutate_at(cols, funs(factor(.)))
+  df$TIMESTAMP <- as_datetime(df$TIMESTAMP,origin = lubridate::origin,tz="Europe/Paris") 
+  return(df)
+}
 
 # combine data # only for final test
 #trainingData <- bind_rows(trainingData, validationData)
