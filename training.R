@@ -1,46 +1,61 @@
 #### Ignacio: Missing loading of libraries!!!
-library(readr)
-library(dplyr)
-library(magrittr)
-library(lubridate)
-#library(anytime)
-####
+if (!exists("pacman")) {
+  install.packages("pacman")
+} else {
+    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly())
+}
+
 
 # Load data
-trainingData   <- read_csv("UBIQUM/MENTOR/DA119/DATA/trainingData.csv")
-validationData <- read_csv("UBIQUM/MENTOR/DA119/DATA/validationData.csv")
+trainingData   <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets//trainingData.csv")
+validationData <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets//validationData.csv")
+
 
 # Pre processing ####
 # feature type
-trainingData$FLOOR <- as.factor(trainingData$FLOOR)
-trainingData$BUILDINGID <- as.factor(trainingData$BUILDINGID)
-trainingData$SPACEID <- as.factor(trainingData$SPACEID)
-trainingData$RELATIVEPOSITION <- as.factor(trainingData$RELATIVEPOSITION)
-trainingData$USERID <- as.factor(trainingData$USERID)
-trainingData$PHONEID <- as.factor(trainingData$PHONEID)
-trainingData$TIMESTAMP <- as_datetime(trainingData$TIMESTAMP)
-
-validationData$FLOOR <- as.factor(validationData$FLOOR)
-validationData$BUILDINGID <- as.factor(validationData$BUILDINGID)
-validationData$SPACEID <- as.factor(validationData$SPACEID)
-validationData$RELATIVEPOSITION <- as.factor(validationData$RELATIVEPOSITION)
-validationData$USERID <- as.factor(validationData$USERID)
-validationData$PHONEID <- as.factor(validationData$PHONEID)
-validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
+# trainingData$FLOOR <- as.factor(trainingData$FLOOR)
+# trainingData$BUILDINGID <- as.factor(trainingData$BUILDINGID)
+# trainingData$SPACEID <- as.factor(trainingData$SPACEID)
+# trainingData$RELATIVEPOSITION <- as.factor(trainingData$RELATIVEPOSITION)
+# trainingData$USERID <- as.factor(trainingData$USERID)
+# trainingData$PHONEID <- as.factor(trainingData$PHONEID)
+# trainingData$TIMESTAMP <- as_datetime(trainingData$TIMESTAMP)
+# 
+# validationData$FLOOR <- as.factor(validationData$FLOOR)
+# validationData$BUILDINGID <- as.factor(validationData$BUILDINGID)
+# validationData$SPACEID <- as.factor(validationData$SPACEID)
+# validationData$RELATIVEPOSITION <- as.factor(validationData$RELATIVEPOSITION)
+# validationData$USERID <- as.factor(validationData$USERID)
+# validationData$PHONEID <- as.factor(validationData$PHONEID)
+# validationData$TIMESTAMP <- as_datetime(validationData$TIMESTAMP)
 
 #### Ignacio: A better way to do it. 
 #### In this way you do two things in one:
-#### You prevent typing too much.
+#### 1)-Sets the following variables to be categorical:
+#### "FLOOR","BUILDINGID","SPACEID","RELATIVEPOSITION","USERID","PHONEID"
+#### 2)-Set the variable "TIMESTAMP" as DateTime.
+#### Inputs: the dataframe
+#### Output: the dataframe with the corresponding modifications.
+#### In this way you can prevent typing too much.
 #### You can apply the same function on training and validation sets.
+
 preproc <- function(df) {
   cols <- c("FLOOR","BUILDINGID","SPACEID","RELATIVEPOSITION","USERID","PHONEID")
   df %<>% mutate_at(cols, funs(factor(.)))
-  df$TIMESTAMP <- as_datetime(df$TIMESTAMP,origin = lubridate::origin,tz="Europe/Paris") 
+  df$TIMESTAMP <- as_datetime(df$TIMESTAMP,origin="1970-01-01",tz="Europe/Madrid")
   return(df)
 }
 
+trainingData   <- preproc(trainingData)
+validationData <- preproc(validationData)
+
+#### Ignacio: Ferran, you should justify the need to merge both datasets.
+#### Why they need to be merged if so? In principle, the validation is 
+#### to validate your models...
+#### Moreover, if you create a combined data, it's better to call it in another
+#### way.
 # combine data # only for final test
-#trainingData <- bind_rows(trainingData, validationData)
+combinedData <- bind_rows(trainingData, validationData)
 
 #str(trainingData[520:529])
 #trainingData$SPACEID <- as.factor(trainingData$SPACEID)
@@ -53,39 +68,71 @@ preproc <- function(df) {
 sum(is.na(trainingData), na.rm = TRUE)
 sum(is.na(validationData), na.rm = TRUE)
 
+#### Ignacio:
 # duplicated rows #637
-trainingData <- trainingData[!duplicated(trainingData), ]
+if (sum(duplicated(trainingData)) != 0) {
+  trainingData <- trainingData[!duplicated(trainingData), ]
+}
 
+#trainingData <- trainingData[!duplicated(trainingData), ]
+
+#### Ignacio: Data exploration.
+#### Those plots are not the best ones, as the dataset is 3D and the plots
+#### are 2D projections. Therefore, you can't see how the observations were 
+#### taken in each floor. Are all the floors evenly sampled? 
+#### The initial idea to compare both datasets samplings was ok, but the 
+#### approach is not the best one because you can't see how they overlap. 
+#### One possibility is is to add a new column to each dataset specifiying if 
+#### to which kind of dataset corresponds. Then we you merge both, you can
+#### color according to this column. ;). Moreover, ggplot can do a better job
+#### than plot base function. Even more, you can "send" the ggplot to plot_ly
+#### and you will be able to interact with the plot.
 #lat lon plot
-plot(trainingData$LONGITUDE, trainingData$LATITUDE, pch = 19, main = "Training Data",
-     xlab = "Longitude", ylab = "Latitude")
 
-plot(validationData$LONGITUDE, validationData$LATITUDE, pch = 19, main = "Validation Data",
-     xlab = "Longitude", ylab = "Latitude")
+trainingData$set <- "Train"
+validationData$set <- "Validation"
+combinedData <- bind_rows(trainingData, validationData)
+combinedData$set <- as.factor(combinedData$set)
+
+p <- plot_ly(combinedData, x = ~LONGITUDE, y = ~LATITUDE, z = ~FLOOR, color = ~set, colors = c('cyan', 'red'),
+             size = 1.2) %>% add_markers() %>%
+             layout(scene = list(xaxis = list(title = 'Longitude'),
+                            yaxis = list(title = 'Latitude'),
+                            zaxis = list(title = 'Floor')))
+p
+
+#plot(trainingData$LONGITUDE, trainingData$LATITUDE, pch = 19, main = "Training Data",
+#     xlab = "Longitude", ylab = "Latitude")
+
+#plot(validationData$LONGITUDE, validationData$LATITUDE, pch = 19, main = "Validation Data",
+#     xlab = "Longitude", ylab = "Latitude")
 
 #lat lon building 1 second floor
-trainingDataq <- filter(trainingData, BUILDINGID == 1)
-trainingDataq <- filter(trainingDataq, FLOOR == 2)
+#trainingDataq <- filter(trainingData, BUILDINGID == 1)
+#trainingDataq <- filter(trainingDataq, FLOOR == 2)
 
-validationDataq <- filter(validationData, BUILDINGID == 1)
-validationDataq <- filter(validationDataq, FLOOR == 2)
+#validationDataq <- filter(validationData, BUILDINGID == 1)
+#validationDataq <- filter(validationDataq, FLOOR == 2)
 
-plot(trainingDataq$LONGITUDE, trainingDataq$LATITUDE, pch = 19, main = "Training Data",
-     xlab = "Longitude", ylab = "Latitude")
+#plot(trainingDataq$LONGITUDE, trainingDataq$LATITUDE, pch = 19, main = "Training Data",
+#     xlab = "Longitude", ylab = "Latitude")
 
-plot(validationDataq$LONGITUDE, validationDataq$LATITUDE, pch = 19, main = "Validation Data",
-     xlab = "Longitude", ylab = "Latitude")
+#plot(validationDataq$LONGITUDE, validationDataq$LATITUDE, pch = 19, main = "Validation Data",
+#     xlab = "Longitude", ylab = "Latitude")
 
-rm("trainingDataq", "validationDataq")
+#rm("trainingDataq", "validationDataq")
 
 # rows with all na
 # combined data #73
-Data_T0 <- trainingData
-trainingData <- subset(trainingData, select = -c(LONGITUDE, LATITUDE, FLOOR, BUILDINGID, SPACEID,
-                                                 RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+#### Ignacio: Avoid making copies and copies of your datasets, specially when they
+#### are big.
+#Data_T0 <- trainingData
+#trainingData <- subset(trainingData, select = -c(LONGITUDE, LATITUDE, FLOOR, BUILDINGID, SPACEID,
+#                                                 RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+
 trainingData[trainingData == 100] <- NA
 
-ind <- apply(trainingData, 1, function(x) all(is.na(x)))
+ind <- apply(trainingData[,c(1:520)], 1, function(x) all(is.na(x)))
 sum(ind)
 Data_T0 <- Data_T0[!ind, ]
 trainingData <- trainingData[!ind, ]
