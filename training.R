@@ -1,14 +1,14 @@
 #### Ignacio: Missing loading of libraries!!!
-if (!exists("pacman")) {
+if ("pacman" %in% rownames(installed.packages()) == FALSE) {
   install.packages("pacman")
 } else {
-    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly())
+    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly)
 }
 
 
 # Load data
-trainingData   <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets//trainingData.csv")
-validationData <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets//validationData.csv")
+trainingData   <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets/trainingData.csv")
+validationData <- read_csv("UBIQUM/MENTOR/DA119/Ferran Donoso/Wi-Fi/datasets/validationData.csv")
 
 
 # Pre processing ####
@@ -89,12 +89,12 @@ if (sum(duplicated(trainingData)) != 0) {
 #### and you will be able to interact with the plot.
 #lat lon plot
 
-trainingData$set <- "Train"
-validationData$set <- "Validation"
+trainingData$Set <- "Train"
+validationData$Set <- "Validation"
 combinedData <- bind_rows(trainingData, validationData)
-combinedData$set <- as.factor(combinedData$set)
+combinedData$Set <- as.factor(combinedData$Set)
 
-p <- plot_ly(combinedData, x = ~LONGITUDE, y = ~LATITUDE, z = ~FLOOR, color = ~set, colors = c('cyan', 'red'),
+p <- plot_ly(combinedData, x = ~LONGITUDE, y = ~LATITUDE, z = ~FLOOR, color = ~Set, colors = c('cyan', 'red'),
              size = 1.2) %>% add_markers() %>%
              layout(scene = list(xaxis = list(title = 'Longitude'),
                             yaxis = list(title = 'Latitude'),
@@ -132,28 +132,53 @@ p
 
 trainingData[trainingData == 100] <- NA
 
+#### Ignacio: Explain better what you are doing and why. You are trying yo figure
+#### out in which locations the user doesn't have any WIFI signal. In those locations
+#### the user will get NA for all the WAPS.
 ind <- apply(trainingData[,c(1:520)], 1, function(x) all(is.na(x)))
 sum(ind)
-Data_T0 <- Data_T0[!ind, ]
+#Data_T0 <- Data_T0[!ind, ]
 trainingData <- trainingData[!ind, ]
 
-trainingData <- cbind(trainingData, Data_T0[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
-                                                "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
+#trainingData <- cbind(trainingData, Data_T0[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
+#                                                "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
 
+#### Ignacio: We free memory.
 rm("ind")
 
+#### Ignacio: Explain better your purpose. You want to determine which waps
+#### were never used. In this case, all the rows of a particular WAP will  be
+#### NA.
 # columns that have the same value for every row
 # training data #55
-WAPs <- grep("WAP", names(Data_T0), value=T)
-colvar0_td <- apply(Data_T0[, c(WAPs)], 2, function(x) var(x, na.rm = T) == 0)
-Waps0var_td <- names(Data_T0[, c(WAPs)])[colvar0_td]
+WAPs_train <- grep("WAP", names(trainingData), value=T)
+WAPs_val   <- grep("WAP", names(validationData), value=T)
+#colvar0_td <- apply(Data_T0[, c(WAPs)], 2, function(x) var(x, na.rm = T) == 0)
+#Waps0var_td <- names(Data_T0[, c(WAPs)])[colvar0_td]
+not_used_waps_train <- apply(trainingData[,c(WAPs_train)],2,function(x) all(is.na(x)))
+not_used_waps_val   <- apply(validationData[,c(WAPs_val)],2,function(x) all(is.na(x)))
+
+s <- which(not_used_waps_train==TRUE)
+p <- which(not_used_waps_val==TRUE)
+
+#### Ignacio: You can't use WAPs which were not available in any of the datasets
+#### observations
+not_used_waps <- union(s,p)
+
+#### Ignacio: We free memory
+rm(not_used_waps_train,not_used_waps_val,s,p)
 
 # remove the found columns
-Data_T0 <- Data_T0[, !(colnames(Data_T0) %in% Waps0var_td), drop = FALSE]
-trainingData <- trainingData[, !(colnames(trainingData) %in% Waps0var_td), drop = FALSE]
-WAPs <- grep("WAP", names(Data_T0), value=T)
+#Data_T0 <- Data_T0[, !(colnames(Data_T0) %in% Waps0var_td), drop = FALSE]
 
-rm("colvar0_td", "Waps0var_td")
+#trainingData <- trainingData[, !(colnames(trainingData) %in% Waps0var_td), drop = FALSE]
+trainingData   <- trainingData[, -c(not_used_waps)]
+validationData <- validationData[, -c(not_used_waps)]
+#### Ignacio: Updating columns which corresponds to waps. As both datasets have
+#### the same number of WAPs we only need to define this variable once.
+WAPs <- grep("WAP", names(trainingData), value=T)
+
+#rm("colvar0_td", "Waps0var_td")
 
 #relocate very good and very bad signals
 WAPs <- grep("WAP", names(Data_T0), value=T)
