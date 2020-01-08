@@ -2,7 +2,7 @@
 if ("pacman" %in% rownames(installed.packages()) == FALSE) {
   install.packages("pacman")
 } else {
-    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly)
+    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly,reshape2,tidyr)
 }
 
 
@@ -57,13 +57,6 @@ validationData <- preproc(validationData)
 # combine data # only for final test
 combinedData <- bind_rows(trainingData, validationData)
 
-#str(trainingData[520:529])
-#trainingData$SPACEID <- as.factor(trainingData$SPACEID)
-#trainingData$RELATIVEPOSITION <- as.factor(trainingData$RELATIVEPOSITION)
-#trainingData$USERID <- as.factor(trainingData$USERID)
-#trainingData$PHONEID <- as.factor(trainingData$PHONEID)
-#rm("validationData")
-
 # NA
 sum(is.na(trainingData), na.rm = TRUE)
 sum(is.na(validationData), na.rm = TRUE)
@@ -74,7 +67,9 @@ if (sum(duplicated(trainingData)) != 0) {
   trainingData <- trainingData[!duplicated(trainingData), ]
 }
 
-#trainingData <- trainingData[!duplicated(trainingData), ]
+if (sum(duplicated(validationData)) != 0) {
+  validationData <- validationData[!duplicated(validationData), ]
+}
 
 #### Ignacio: Data exploration.
 #### Those plots are not the best ones, as the dataset is 3D and the plots
@@ -101,50 +96,29 @@ p <- plot_ly(combinedData, x = ~LONGITUDE, y = ~LATITUDE, z = ~FLOOR, color = ~S
                             zaxis = list(title = 'Floor')))
 p
 
-#plot(trainingData$LONGITUDE, trainingData$LATITUDE, pch = 19, main = "Training Data",
-#     xlab = "Longitude", ylab = "Latitude")
-
-#plot(validationData$LONGITUDE, validationData$LATITUDE, pch = 19, main = "Validation Data",
-#     xlab = "Longitude", ylab = "Latitude")
-
-#lat lon building 1 second floor
-#trainingDataq <- filter(trainingData, BUILDINGID == 1)
-#trainingDataq <- filter(trainingDataq, FLOOR == 2)
-
-#validationDataq <- filter(validationData, BUILDINGID == 1)
-#validationDataq <- filter(validationDataq, FLOOR == 2)
-
-#plot(trainingDataq$LONGITUDE, trainingDataq$LATITUDE, pch = 19, main = "Training Data",
-#     xlab = "Longitude", ylab = "Latitude")
-
-#plot(validationDataq$LONGITUDE, validationDataq$LATITUDE, pch = 19, main = "Validation Data",
-#     xlab = "Longitude", ylab = "Latitude")
-
-#rm("trainingDataq", "validationDataq")
-
 # rows with all na
 # combined data #73
 #### Ignacio: Avoid making copies and copies of your datasets, specially when they
 #### are big.
-#Data_T0 <- trainingData
-#trainingData <- subset(trainingData, select = -c(LONGITUDE, LATITUDE, FLOOR, BUILDINGID, SPACEID,
-#                                                 RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
 
 trainingData[trainingData == 100] <- NA
+validationData[validationData == 100] <- NA
 
 #### Ignacio: Explain better what you are doing and why. You are trying yo figure
 #### out in which locations the user doesn't have any WIFI signal. In those locations
-#### the user will get NA for all the WAPS.
-ind <- apply(trainingData[,c(1:520)], 1, function(x) all(is.na(x)))
-sum(ind)
-#Data_T0 <- Data_T0[!ind, ]
-trainingData <- trainingData[!ind, ]
+#### the user will get NA for all the WAPS. 
+#### For this purpose, you can create a function to drop the columns for which all
+#### the values are NA's
 
-#trainingData <- cbind(trainingData, Data_T0[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
-#                                                "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
+drop_allna_cols <- function(df) {
+  ind <- apply(df[,c(1:520)], 1, function(x) all(is.na(x)))
+  df <- df[!ind,]
+  return(df)
+}
 
-#### Ignacio: We free memory.
-rm("ind")
+
+trainingData   <- drop_allna_cols(trainingData)
+validationData <- drop_allna_cols(validationData)
 
 #### Ignacio: Explain better your purpose. You want to determine which waps
 #### were never used. In this case, all the rows of a particular WAP will  be
@@ -153,8 +127,7 @@ rm("ind")
 # training data #55
 WAPs_train <- grep("WAP", names(trainingData), value=T)
 WAPs_val   <- grep("WAP", names(validationData), value=T)
-#colvar0_td <- apply(Data_T0[, c(WAPs)], 2, function(x) var(x, na.rm = T) == 0)
-#Waps0var_td <- names(Data_T0[, c(WAPs)])[colvar0_td]
+
 not_used_waps_train <- apply(trainingData[,c(WAPs_train)],2,function(x) all(is.na(x)))
 not_used_waps_val   <- apply(validationData[,c(WAPs_val)],2,function(x) all(is.na(x)))
 
@@ -169,88 +142,76 @@ not_used_waps <- union(s,p)
 rm(not_used_waps_train,not_used_waps_val,s,p)
 
 # remove the found columns
-#Data_T0 <- Data_T0[, !(colnames(Data_T0) %in% Waps0var_td), drop = FALSE]
-
-#trainingData <- trainingData[, !(colnames(trainingData) %in% Waps0var_td), drop = FALSE]
 trainingData   <- trainingData[, -c(not_used_waps)]
 validationData <- validationData[, -c(not_used_waps)]
+combinedData <- bind_rows(trainingData, validationData)
+combinedData$Set <- as.factor(combinedData$Set)
+
 #### Ignacio: Updating columns which corresponds to waps. As both datasets have
 #### the same number of WAPs we only need to define this variable once.
 WAPs <- grep("WAP", names(trainingData), value=T)
 
-#rm("colvar0_td", "Waps0var_td")
-
 #relocate very good and very bad signals
-WAPs <- grep("WAP", names(Data_T0), value=T)
-dat1 <- melt(Data_T0[, WAPs])
-dat1[dat1 == 100] <- NA
-plot(density(dat1$value, na.rm = TRUE))
+dat1 <- melt(combinedData[, c(WAPs,"Set")])
 
-dat2 <- melt(validationData[1:520])
-dat2[dat2 == 100] <- NA
-plot(density(dat2$value, na.rm = TRUE))
+ggplot(dat1,aes(x=value,fill=Set)) +
+  geom_density(alpha = 0.2) +
+  xlab("RSSI Signal value") +
+  ggtitle("Densities of WAP signals for each dataset")
 
-plot(density(dat1$value, na.rm = TRUE), xaxt="n", lwd = 2, main = "RSSI Density", xlab = "RSSI")
-lines(density(dat2$value, na.rm = TRUE), col="red", lwd = 2)
-axis(1, at = seq(-100, 0, by = 10))
-legend(-45, 0.15, col=c("black", "red"), c("Training", "Validation"), pch=c(19))
-
-density(dat1$value, na.rm = TRUE)$x[which.max(density(dat1$value, na.rm = TRUE)$y)]
-
+#### Ignacio: Obtaning the signal value for which the density is highest.
+#### Moreover, why do you pick the value of "a" based on the training set?
 a <- density(dat1$value, na.rm = TRUE)$x[which.max(density(dat1$value, na.rm = TRUE)$y)]
 
-dat1$value[dat1$value < a] <- a
-dat2$value[dat2$value < a] <- a
+#### Ignacio: replacing values smaller than a by a. Ferran, what is the idea behind
+#### this approach? This should be explained. At the same time, you are replacing 
+#### signal higher than -29 by -29. There is any reason for chosing this particular
+#### value? 
 
-dat1$value[dat1$value > -29] <- -29
-dat2$value[dat2$value > -29] <- -29
+#transform datasets
+replace_values <- function(x,value) {
+  ifelse(x < value,x<-value,ifelse(x > -29,x <- -29, x <- x))
+}
 
-#transform training
-WAPs <- grep("WAP", names(Data_T0), value=T)
-Data_T0t <- Data_T0[, WAPs]
-Data_T0t[Data_T0t == 100] <- NA
-Data_T0t[Data_T0t < a] <- a
-Data_T0t[Data_T0t > -29] <- -29
-Data_T0 <- cbind(Data_T0t, Data_T0[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
-                                                      "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
-Data_T0[is.na(Data_T0)] <- 100
-
-plot(density(Data_T0t$WAP173, na.rm = TRUE))
-
-#transform validation
-WAPs <- grep("WAP", names(validationData), value=T)
-validationData1 <- validationData[, WAPs]
-validationData1[validationData1 == 100] <- NA
-validationData1[validationData1 < a] <- a
-validationData1[validationData1 > -29] <- -29
-validationData <- cbind(validationData1, validationData[, c("LONGITUDE", "LATITUDE", "FLOOR", "BUILDINGID", "SPACEID",
-                                                      "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")])
-validationData[is.na(validationData)] <- 100
-
-plot(density(validationData1$WAP173, na.rm = TRUE))
-
-#rm("dat1", "dat2", "a", "Data_T0t", "validationData1")
+trainingData[,c(WAPs)] <- mapply(replace_values,trainingData[,c(WAPs)],a)
+trainingData[,c(WAPs)] <- mapply(replace_values,trainingData[,c(WAPs)],a)
 
 # create BUILDINGID_FLOOR feature
-Data_T0 <- unite(Data_T0, BUILDINGID_FLOOR, c("BUILDINGID", "FLOOR"), sep = "_", remove = FALSE)
-Data_T0$BUILDINGID_FLOOR <- as.factor(Data_T0$BUILDINGID_FLOOR)
+build_floor <- function(df) {
+  df <- unite(df, BUILDINGID_FLOOR, c("BUILDINGID", "FLOOR"), sep = "_", remove = FALSE)
+  df$BUILDINGID_FLOOR <- as.factor(df$BUILDINGID_FLOOR)
+  return(df)
+}
+
+trainingData   <- build_floor(trainingData)
+validationData <- build_floor(validationData)
 
 # find waps that affect multiple buildings and floors ####
 # highest wap signal for each observation
-Data_T1 <- Data_T0
-Data_T0[Data_T0 == 100] <- -100
-Data_T1[Data_T1 == 100] <- NA
-Data_T1 <- subset(Data_T1, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR, BUILDINGID,
-                                            SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
+# Data_T1 <- Data_T0
+# Data_T0[Data_T0 == 100] <- -100
+# Data_T1[Data_T1 == 100] <- NA
+# Data_T1 <- subset(Data_T1, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR, BUILDINGID,
+#                                             SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
 
-HighestWap <- names(Data_T1)[apply(Data_T1, 1, which.max)]
+HighestWap_train <- names(trainingData)[apply(trainingData[,c(WAPs)], 1, which.max)]
+HighestWap_val   <- names(validationData)[apply(validationData[,c(WAPs)], 1, which.max)]
 
 # to which building_floor every wap is sending his highest signal
-Data_T1$BUILDINGID_FLOOR <- Data_T0$BUILDINGID_FLOOR
+Highest_loc_train <- data.frame("WAP"=HighestWap_train,
+                "BFLocation"=trainingData$BUILDINGID_FLOOR)
 
-WAPs <- grep("WAP", names(Data_T1), value=T)
-BFLocation <- apply(Data_T1[, c(WAPs)], 2, function (x)
-  names(which.max(table(Data_T1[which(!is.na(x)), "BUILDINGID_FLOOR"]))))
+#### Ignacio:
+multiple <- c()
+for ( i in unique(Highest_loc_train$WAP) ) {
+  multiple <- rbind(multiple,c(i,length(unique(Highest_loc_train[which(Highest_loc_train$WAP == i),]$BFLocation))))
+}
+
+multiple <- as.data.frame(multiple)
+colnames(multiple) <- c("WAP","Number_of_locations")
+multiple$Number_of_locations <- as.numeric(multiple$Number_of_locations)
+histogram(multiple$Number_of_locations)
+
 
 # building and floor prediction #Accuracy: 0.7722
 HighestWap <- as.data.frame(HighestWap)
@@ -270,6 +231,9 @@ BFPredictionErrors <- BFPrediction[BFPrediction$Error == FALSE, ]
 unique(BFPredictionErrors$WAP)
 BFErrors <- unique(BFPrediction[BFPrediction$Error == FALSE, ]$WAP)
 Data_T0_BFE <- Data_T0[, !(colnames(Data_T0) %in% BFErrors), drop = FALSE]
+
+#### Ignacio:
+length(unique(Highest_loc_train[which(Highest_loc_train$WAP == "WAP090"),]$BFLocation))
 
 plot(Data_T1$BUILDINGID_FLOOR, Data_T1$WAP173)
 plot(density(Data_T1$WAP173, na.rm = TRUE))
