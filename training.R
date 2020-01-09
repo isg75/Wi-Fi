@@ -2,7 +2,7 @@
 if ("pacman" %in% rownames(installed.packages()) == FALSE) {
   install.packages("pacman")
 } else {
-    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly,reshape2,tidyr)
+    pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly,reshape2,tidyr,caret)
 }
 
 
@@ -186,57 +186,69 @@ build_floor <- function(df) {
 trainingData   <- build_floor(trainingData)
 validationData <- build_floor(validationData)
 
-# find waps that affect multiple buildings and floors ####
-# highest wap signal for each observation
-# Data_T1 <- Data_T0
-# Data_T0[Data_T0 == 100] <- -100
-# Data_T1[Data_T1 == 100] <- NA
-# Data_T1 <- subset(Data_T1, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR, BUILDINGID,
-#                                             SPACEID, RELATIVEPOSITION, USERID, PHONEID, TIMESTAMP))
-
+#### First model to predict the combination of building-flor ####
+####
+#### Ignacio: For each observation, we determine which WAP gives the highest signal.
+#### As the WAPs doesn't move, if we know in which building-floor each wap is located,
+#### we simply need to to know which is the WAP with the highest signal in order to
+#### know were we are just simply predicting to be the most frequent building-floor
+#### in which the highest signal of the WAP was found.
+####
+#### However this predictive model has several weak points: 
+####
+#### 1)-Not allways the most frequent location is the real one. 
+####
+#### 2)-if in a future dataset the WAP with the higest signal is not in the current model because it was 
+#### previously discarded, the model will not be able to provide a prediction.
+####
+#### First step: Finding out for each observation, which is the WAP which gives
+#### the strongest signal.
 HighestWap_train <- names(trainingData)[apply(trainingData[,c(WAPs)], 1, which.max)]
-HighestWap_val   <- names(validationData)[apply(validationData[,c(WAPs)], 1, which.max)]
 
-# to which building_floor every wap is sending his highest signal
+#### Second step: For each observation we find out in which building_floor the 
+#### observation was recorded.
 Highest_loc_train <- data.frame("WAP"=HighestWap_train,
                 "BFLocation"=trainingData$BUILDINGID_FLOOR)
 
-#### Ignacio:
+#### Third step:We find out for each WAP what was the most frequent building-floor
+#### in which the highest signal was recorded for it and we store if on a dataframe.
 multiple <- c()
 for ( i in unique(Highest_loc_train$WAP) ) {
-  multiple <- rbind(multiple,c(i,length(unique(Highest_loc_train[which(Highest_loc_train$WAP == i),]$BFLocation))))
+  multiple <- rbind(multiple,
+                    c(i,names(which.max(table(Highest_loc_train[which(Highest_loc_train$WAP == i),]$BFLocation)))))
 }
 
 multiple <- as.data.frame(multiple)
-colnames(multiple) <- c("WAP","Number_of_locations")
-multiple$Number_of_locations <- as.numeric(multiple$Number_of_locations)
-histogram(multiple$Number_of_locations)
+colnames(multiple) <- c("WAP","Most_Frequent_location")
+multiple$Most_Frequent_location <- factor(multiple$Most_Frequent_location,
+                                          levels = levels(trainingData$BUILDINGID_FLOOR))
 
+#### Evaluating the model. In order to do that, we will append a new column 
+#### to the Highest_loc_train dataframe with the prediction.
+Highest_loc_train$Prediction <- sapply(Highest_loc_train$WAP,function(x) multiple[which(multiple$WAP==x),]$Most_Frequent_location )
 
-# building and floor prediction #Accuracy: 0.7722
-HighestWap <- as.data.frame(HighestWap)
-names(HighestWap)[1] <- "WAP"
-BFLocation <- as.data.frame(BFLocation)
+#### Getting the confussion Matrix.
+confusionMatrix(trainingData$BUILDINGID_FLOOR, Highest_loc_train$Prediction)
+#### As it can be seen, the accuracy is pretty small: 0.53, while the kappa
+#### is 0.48. Therefore this model can be used as a benchmark, but not for
+#### production.
+#### Close inspection of the Confusion Matrix (CM henceforth) shows that some
+#### waps sometimes give the strongest signal in two different buildings. 
+#### A possible explanation to is will be that in the current building-floor
+#### the wifi coverage is poor. In order to dig more in this respect , a deeper
+#### inspection of the errors should be conducted.
+#### For this purpose, on can add and extra column which a mismatch betwee the
+#### real location and the predicted coded in two colors: green = correct, red
+#### = incorrect.
+trainingData$BFPred <- sapply(Highest_loc_train,
+                              ifelse(BFLocation == Prediction,"Green","Red"))
 
-BFLocation <- data.frame(WAP = rownames(BFLocation), location = BFLocation$BFLocation)
+#### On the other hand, the same CM inspection shows that is almost block diagonal,
+#### therefore this model could be much better in predicting only the building. 
+#### Let's see it performs. 
 
-BFPrediction <- left_join(HighestWap, BFLocation)
-BFPrediction$BUILDINGID_FLOOR <- Data_T0$BUILDINGID_FLOOR
-
-confusionMatrix(table(BFPrediction$BUILDINGID_FLOOR, BFPrediction$location))
-
-# explore waps that affect multiple buildings and floors #175
-BFPrediction$Error <- BFPrediction$location == BFPrediction$BUILDINGID_FLOOR
-BFPredictionErrors <- BFPrediction[BFPrediction$Error == FALSE, ]
-unique(BFPredictionErrors$WAP)
-BFErrors <- unique(BFPrediction[BFPrediction$Error == FALSE, ]$WAP)
-Data_T0_BFE <- Data_T0[, !(colnames(Data_T0) %in% BFErrors), drop = FALSE]
-
-#### Ignacio:
-length(unique(Highest_loc_train[which(Highest_loc_train$WAP == "WAP090"),]$BFLocation))
-
-plot(Data_T1$BUILDINGID_FLOOR, Data_T1$WAP173)
-plot(density(Data_T1$WAP173, na.rm = TRUE))
+#### In order to do this, we only need to get the first digit of the predicted
+#### building-floor.
 
 # building prediction #Accuracy: 0.9925
 BPrediction <- BFPrediction
