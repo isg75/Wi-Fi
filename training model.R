@@ -1,41 +1,42 @@
-# building prediction ####
-Testing <- validationData
+#### Missing library loading
+if ("pacman" %in% rownames(installed.packages()) == FALSE) {
+  install.packages("pacman")
+} else {
+  pacman::p_load(ranger,e1071)
+}
 
-# ranger all waps #Accuracy: 0.9982 / Kappa: 0.9972 / P-Value: < 2.2e-16
-Training_Building_1 <- subset(Data_T0, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR,
-                                                   SPACEID, RELATIVEPOSITION, USERID, PHONEID,
-                                                   TIMESTAMP))
+#### building prediction ####
 
-set.seed(123); Building_Model_1 <- ranger(BUILDINGID~., data = Training_Building_1)
-Pred_Building_Model_1 <- predict(Building_Model_1, Testing)
 
-confusionMatrix(table(Testing$BUILDINGID, Pred_Building_Model_1$predictions))
+# ranger all waps #Accuracy: 0.98 / Kappa: 0.97 / P-Value: < 2.2e-16
 
-rm("Training_Building_1", "Building_Model_1", "Pred_Building_Model_1")
+set.seed(123)
 
-# ranger all waps not in B Errors  #Accuracy: 0.9982 / Kappa: 0.9972 / P-Value: < 2.2e-16
-Training_Building_3 <- subset(Data_T0_BE, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR,
-                                                      SPACEID, RELATIVEPOSITION, USERID, PHONEID,
-                                                      TIMESTAMP))
+#### Ignacio: Brute force approach. Using all the WAPS a model without knowing what
+#### it does. High risk of overffiting.
+#### Using a method that 
+#Building_Model_1 <- ranger(BUILDINGID~., data = Training_Building_1)
+WAPs <- grep("WAP", names(trainingData), value=T)
 
-set.seed(123); Building_Model_3 <- ranger(BUILDINGID~., data = Training_Building_3)
-Pred_Building_Model_3 <- predict(Building_Model_3, Testing)
+Building_Model_ranger <- ranger::ranger(BUILDINGID~., data = trainingData[,c(WAPs,"BUILDINGID")])
 
-confusionMatrix(table(Testing$BUILDINGID, Pred_Building_Model_3$predictions))
+Building_Model_ranger_cm_train <- confusionMatrix(trainingData$BUILDINGID, Building_Model_ranger$predictions) 
 
-rm("Training_Building_3", "Building_Model_3", "Pred_Building_Model_3")
+Building_Model_ranger_val_pred <- predict(Building_Model_ranger, validationData[,c(WAPs)])
 
-# ranger all waps not in BF Errors  #Accuracy: 0.9721 / Kappa: 0.9559 / P-Value: < 2.2e-16
-Training_Building_4 <- subset(Data_T0_BFE, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR,
-                                                       SPACEID, RELATIVEPOSITION, USERID, PHONEID,
-                                                       TIMESTAMP))
+#### Results on validation set: Accuracy: 0.98, Kappa: 0.9, P-value = 0.001
+Building_Model_ranger_cm_val <- confusionMatrix(validationData$BUILDINGID, Building_Model_ranger_val_pred[[1]]) 
 
-set.seed(123); Building_Model_4 <- ranger(BUILDINGID~., data = Training_Building_4)
-Pred_Building_Model_4 <- predict(Building_Model_4, Testing)
+#### Using Ranger to predict Building-floor:
+# ranger all waps not in BF Errors  #Accuracy: 0.85 / Kappa: 0.84 / P-Value: < 2.2e-16
+BF_Model_ranger <- ranger::ranger(BUILDINGID_FLOOR~., data = trainingData[,c(WAPs,"BUILDINGID_FLOOR")]) 
 
-confusionMatrix(table(Testing$BUILDINGID, Pred_Building_Model_4$predictions))
+BF_Model_ranger_cm_train <- confusionMatrix(trainingData$BUILDINGID_FLOOR,BF_Model_ranger$predictions)
 
-rm("Training_Building_4", "Building_Model_4", "Pred_Building_Model_4")
+BF_Model_ranger_pred_val <- predict(BF_Model_ranger,validationData[,c(WAPs)])
+
+#### Accuracy: 0.73, Kappa: 0.70
+BF_Model_ranger_cm_val <- confusionMatrix(validationData$BUILDINGID_FLOOR,BF_Model_ranger_pred_val[[1]])
 
 # ranger top3waps #Accuracy: 0.9982 / Kappa: 0.9972 / P-Value: < 2.2e-16
 Training_Building_2 <- subset(Data_T0_T3W, select = -c(LONGITUDE, LATITUDE, BUILDINGID_FLOOR, FLOOR,

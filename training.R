@@ -3,7 +3,7 @@ if ("pacman" %in% rownames(installed.packages()) == FALSE) {
   install.packages("pacman")
 } else {
     pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly,reshape2,tidyr,
-                   caret,stringr)
+                   caret,stringr,mime)
 }
 
 
@@ -40,6 +40,9 @@ preproc <- function(df) {
   if (sum(duplicated(df)) != 0) {
     df <- df[!duplicated(df), ]
   }
+  WAP <- grep("WAP", names(df), value=T)
+  replace <- function(x) ifelse(x == 100,NA,x)
+  df[,c(WAP)] <- df[,c(WAP)] %>% mutate_all(replace)
   return(df)
 }
 
@@ -55,8 +58,8 @@ validationData <- preproc(validationData)
 combinedData <- bind_rows(trainingData, validationData)
 
 # NA
-sum(is.na(trainingData), na.rm = TRUE)
-sum(is.na(validationData), na.rm = TRUE)
+sum(is.na(trainingData))
+sum(is.na(validationData))
 
 #### Ignacio: Data exploration. ####
 #### Those plots are not the best ones, as the dataset is 3D and the plots
@@ -100,50 +103,55 @@ p
 #### has been deliberatelly left here for illustrative purposes.
 
 drop_allna_rows <- function(df) {
-  ind <- apply(df[,c(1:520)], 1, function(x) all(is.na(x)))
-  df <- df[!ind,]
+  WAP <- grep("WAP", names(df), value=T)
+  ind <- which(apply(df[,c(WAP)], 1, function(x) all(is.na(x)))==TRUE)
+  if (length(ind) > 0){df <- df [-ind,]}
+  return(df)
+}
+
+drop_allna_cols <- function(df) {
+  WAP <- grep("WAP", names(df), value=T)
+  cols_to_drop <- which(apply(df[,c(WAP)], 2, function(x) all(is.na(x)))==TRUE)
+  df <- df[,-cols_to_drop]
   return(df)
 }
 
 trainingData   <- drop_allna_rows(trainingData)
 validationData <- drop_allna_rows(validationData)
 
-#### Feature selection: Filtering WAPS ####
-#### Ignacio: Explain better your purpose. You want to determine which waps
-#### were never used. In this case, all the columns of a particular WAP will
-#### be NA.
-# columns that have the same value for every row
-# training data #55
-WAPs_train <- grep("WAP", names(trainingData), value=T)
-WAPs_val   <- grep("WAP", names(validationData), value=T)
+trainingData   <- drop_allna_cols(trainingData)
+validationData <- drop_allna_cols(validationData)
 
+#### Feature selection: Filtering WAPS ####
+#### Ignacio: Determining which WAPS remain in each dataset.
 #### The not used WAPs doesn't need to be the same in both datasets. Therefore,
 #### if we want the most general model, we need to avoid working with any useless
 #### WAPS.
 
-not_used_waps_train <- apply(trainingData[,c(WAPs_train)],2,function(x) all(is.na(x)))
-not_used_waps_val   <- apply(validationData[,c(WAPs_val)],2,function(x) all(is.na(x)))
+#### Finding out which columns corresponds to WAPS in each dataset
+WAPs_train <- grep("WAP", names(trainingData), value=T)
+WAPs_val   <- grep("WAP", names(validationData), value=T)
 
-s <- which(not_used_waps_train==TRUE)
-p <- which(not_used_waps_val==TRUE)
+#### Getting a common set of WAPS in both datasets.
+WAPs <- intersect(WAPs_train,WAPs_val)
 
-#### Ignacio: You can't use WAPs which were not available in any of the datasets
-#### observations.
+rm(WAPs_train,WAPs_val)
 
-not_used_waps <- union(s,p)
+#### Update datasets
+cols_to_keep_train <- c(which(colnames(trainingData) %in% WAPs),
+                  which(grepl("^WAP",colnames(trainingData))== FALSE))
 
-#### Ignacio: We free memory
-rm(not_used_waps_train,not_used_waps_val,s,p)
+cols_to_keep_val  <- c(which(colnames(validationData) %in% WAPs),
+                        which(grepl("^WAP",colnames(validationData))== FALSE))
 
-# remove the found columns
-trainingData   <- trainingData[, -c(not_used_waps)]
-validationData <- validationData[, -c(not_used_waps)]
+trainingData   <- trainingData[,cols_to_keep_train]
+validationData <- validationData[,cols_to_keep_val]
+
 combinedData <- bind_rows(trainingData, validationData)
 combinedData$Set <- as.factor(combinedData$Set)
 
 #### Ignacio: Updating columns which corresponds to waps. As both datasets have
 #### the same number of WAPs we only need to define this variable once.
-WAPs <- grep("WAP", names(trainingData), value=T)
 
 #relocate very good and very bad signals
 dat1 <- melt(combinedData[, c(WAPs,"Set")])
@@ -170,15 +178,25 @@ p0
 #### -30 as values in this range are unrealistic.
 #### See: https://support.randomsolutions.nl/827069-Best-dBm-Values-for-Wifi
 
-replace_values <- function(x) {
-  if ( x != 100) {
-    return(ifelse(x < -90,x<- -90,ifelse(x > -30,x <- -30, x <- x)))
+replace_values <- function(df) {
+  WAP <- grep("WAP", names(df), value=T)
+  na_to_onehundred <- function(x) {
+    ifelse(!is.na(x),ifelse(x < -90,-90,ifelse(x > -30,-30,x)),-100)
   }
-}  
+  df[,c(WAP)] <- df[,c(WAP)] %>% mutate_all(na_to_onehundred)
+  return(df)
+}
 
+# WAP <- grep("WAP", names(df), value=T)
+# replace <- function(x) ifelse(x == 100,NA,x)
+# df[,c(WAP)] <- df[,c(WAP)] %>% mutate_all(replace)
 
-trainingData[,c(WAPs)]   <- mapply(replace_values,trainingData[,c(WAPs)])
-validationData[,c(WAPs)] <- mapply(replace_values,validationData[,c(WAPs)])
+# WAP <- grep("WAP", names(df), value=T)
+# replace <- function(x) ifelse(x == 100,NA,x)
+# df[,c(WAP)] <- df[,c(WAP)] %>% mutate_all(replace)
+
+trainingData     <- replace_values(trainingData)
+validationData   <- replace_values(validationData)
 
 # create BUILDINGID_FLOOR feature
 build_floor <- function(df) {
@@ -233,10 +251,9 @@ Highest_loc_train$Prediction <- sapply(Highest_loc_train$WAP,function(x) multipl
 
 #### Getting the confussion Matrix of the model on the training set ####
 BFPred_cm <- confusionMatrix(trainingData$BUILDINGID_FLOOR, Highest_loc_train$Prediction)
-#### As it can be seen, the accuracy is pretty small: 0.54, while the kappa
-#### is 0.50. Therefore this model can only be used as a benchmark, but not for
-#### production.
-#### Close inspection of the Confusion Matrix (CM henceforth) shows that some
+#### As it can be seen, the accuracy is pretty good: 0.91, while the kappa
+#### is 0.90. Therefore this model can be used as a benchmark.
+#### Close inspection of the Confusion Matrix (CM from now on) shows that some
 #### waps sometimes give the strongest signal in two different buildings. 
 #### A possible explanation to is will be that in the current building-floor
 #### the wifi coverage is poor. In order to dig more in this respect , a deeper
@@ -244,6 +261,7 @@ BFPred_cm <- confusionMatrix(trainingData$BUILDINGID_FLOOR, Highest_loc_train$Pr
 #### For this purpose, on can add and extra column which a mismatch betwee the
 #### real location and the predicted coded in two colors: green = correct, red
 #### = incorrect.
+
 correctness <- function(x,y){
   return(ifelse(x==y,"Green","Red"))
 }
@@ -257,7 +275,7 @@ p1 <- plot_ly(trainingData, x = ~LONGITUDE, y = ~LATITUDE, z = ~FLOOR, color = ~
   layout(scene = list(xaxis = list(title = 'Longitude'),
                       yaxis = list(title = 'Latitude'),
                       zaxis = list(title = 'Floor')),
-         title="Location of the errors")
+         title="Location of the Building_floor errors")
 p1
 
 #### On the other hand, the same CM inspection shows that is almost block diagonal,
@@ -267,11 +285,6 @@ p1
 #### In order to do this, we only need to get the first digit of the predicted
 #### building-floor.
 
-#### building prediction #Accuracy: 0.97 Kappa: 0.96 on the training set.
-#### By simple inspection of the Confussion Matrix, it can be seen that most
-#### of the mistakes made by this simple model takes place in the second building
-#### which is between the others. Signal receptions from WAPs of the others buildings
-#### confuses the model.
 Highest_loc_train$BLocation   <- str_sub(Highest_loc_train$BFLocation, start = 1, end = 1)
 Highest_loc_train$BPrediction <- str_sub(Highest_loc_train$Prediction, start = 1, end = 1)
 
@@ -280,20 +293,28 @@ Highest_loc_train$BPrediction <- as.factor(Highest_loc_train$BPrediction)
 
 #### As it could be expected, this new modelhas better accuracy and kappa on the
 #### training set.
-#### Accuracy: 0.97, Kappa: 0.96
+#### Accuracy: 0.997, Kappa: 0.995
+
 BPredic_cm <- confusionMatrix(Highest_loc_train$BLocation,Highest_loc_train$BPrediction)
 
-
 # explore waps that affect multiple buildings #12
+
 #### Ignacio: The rigth question is, which waps are being detected in several buildings
 #### and where? Those WAPs should be removed in order to avoid confusing the models
 #### Another interesting question is why this happens.
+
 Highest_loc_train$BFCorrect <- Highest_loc_train$BFLocation == Highest_loc_train$Prediction
 BadWAPs <- unique(Highest_loc_train[which(Highest_loc_train$BFCorrect==FALSE),]$WAP)
 trainingData   <- trainingData[,!(colnames(trainingData) %in% BadWAPs), drop = FALSE]
 validationData <- validationData[,!(colnames(validationData) %in% BadWAPs), drop = FALSE]
 
 Highest_loc_train <- Highest_loc_train[which(Highest_loc_train$BFCorrect==TRUE),]
+
+WAPs_train <- grep("WAP", names(trainingData), value=T)
+WAPs_val   <- grep("WAP", names(validationData), value=T)
+
+#### Getting a common set of WAPS in both datasets.
+WAPs <- intersect(WAPs_train,WAPs_val)
 
 trainingData$Top3Waps <- apply(trainingData[,c(WAPs)], 1, function(x) 
   paste(names(head(sort(x, decreasing = TRUE), 3)), collapse = " "))
@@ -303,8 +324,4 @@ trainingData <- separate(trainingData, Top3Waps, c("TopWap1", "TopWap2","TopWap3
 trainingData$TopWap1 <- factor(trainingData$TopWap1, levels = WAPs)
 trainingData$TopWap2 <- factor(trainingData$TopWap2, levels = WAPs)
 trainingData$TopWap3 <- factor(trainingData$TopWap3, levels = WAPs)
-
-trainingData[trainingData == 100] <- -100
-validationData[validationData == 100] <- -100
-
 
