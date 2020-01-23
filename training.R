@@ -316,6 +316,19 @@ WAPs_val   <- grep("WAP", names(validationData), value=T)
 #### Getting a common set of WAPS in both datasets.
 WAPs <- intersect(WAPs_train,WAPs_val)
 
+#### Function to add to a dataframe the waps for which the highest signal has been
+#### recorded in each observation.
+
+topwaps <- function(df) {
+  df$Top3Waps <- apply(df[,c(WAPs)], 1, function(x) 
+    paste(names(head(sort(x, decreasing = TRUE), 3)), collapse = " "))
+  df <- separate(df, Top3Waps, c("TopWap1", "TopWap2","TopWap3"))
+  df$TopWap1 <- factor(df$TopWap1, levels = WAPs)
+  df$TopWap2 <- factor(df$TopWap2, levels = WAPs)
+  df$TopWap3 <- factor(df$TopWap3, levels = WAPs)
+  return(df)
+}
+
 trainingData$Top3Waps <- apply(trainingData[,c(WAPs)], 1, function(x) 
   paste(names(head(sort(x, decreasing = TRUE), 3)), collapse = " "))
 
@@ -325,3 +338,11 @@ trainingData$TopWap1 <- factor(trainingData$TopWap1, levels = WAPs)
 trainingData$TopWap2 <- factor(trainingData$TopWap2, levels = WAPs)
 trainingData$TopWap3 <- factor(trainingData$TopWap3, levels = WAPs)
 
+validationData$Top3Waps <- apply(validationData[,c(WAPs)], 1, function(x) 
+  paste(names(head(sort(x, decreasing = TRUE), 3)), collapse = " "))
+
+validationData <- separate(validationData, Top3Waps, c("TopWap1", "TopWap2","TopWap3"))
+
+validationData$TopWap1 <- factor(validationData$TopWap1, levels = WAPs)
+validationData$TopWap2 <- factor(validationData$TopWap2, levels = WAPs)
+validationData$TopWap3 <- factor(validationData$TopWap3, levels = WAPs)
