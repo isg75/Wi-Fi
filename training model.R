@@ -1,10 +1,3 @@
-#### Missing library loading
-if ("pacman" %in% rownames(installed.packages()) == FALSE) {
-  install.packages("pacman")
-} else {
-  pacman::p_load(ranger,e1071,gridExtra,tidyverse,svDialogs,rstudioapi)
-}
-
 #### Usefull functions for error ploting
 pabserror_split <- function(pred,real,building,z) {
   AELAT <- abs(pred - real)
@@ -51,7 +44,7 @@ Building_Model_ranger_cm_val <- confusionMatrix(validationData$BUILDINGID, Build
 metrics_b[nrow(metrics_b)+1,] <- c(Building_Model_ranger_cm_train$overall[1:2],"AllWaps","Training")
 metrics_b[nrow(metrics_b)+1,] <- c(Building_Model_ranger_cm_val$overall[1:2],"AllWaps","Validation")
 
-#### Model to predict Building-floor with all the WAPs
+#### Building-floor prfediction ####
 
 BF_Model_ranger <- ranger::ranger(BUILDINGID_FLOOR~., data = trainingData[,c(WAPs,"BUILDINGID_FLOOR")]) 
 
@@ -59,28 +52,37 @@ BF_Model_ranger_cm_train <- confusionMatrix(trainingData$BUILDINGID_FLOOR,BF_Mod
 
 BF_Model_ranger_pred_val <- predict(BF_Model_ranger,validationData[,c(WAPs)])
 
-#### Accuracy: 0.73, Kappa: 0.70
 BF_Model_ranger_cm_val <- confusionMatrix(validationData$BUILDINGID_FLOOR,BF_Model_ranger_pred_val[[1]])
 
-#### Model to predict the Building based on the id's of the three WAPs for which
-#### the highest signal is captured. Accuracy:
+### Model to predict the Building based on the id's of the three WAPs for which
+### the highest signal is captured. Accuracy:
 
 predictors_train <- grep("TopW",colnames(trainingData))
-predictors_val   <- grep("TopW",colnames(validationData))
+predictors_train <- c(predictors_train,which(colnames(trainingData)=="BUILDINGID"))
+predictors_validation   <- grep("TopW",colnames(validationData))
+predictors_validation   <- c(predictors_val,which(colnames(validationData)=="BUILDINGID"))
 
-Building_ModelTop3_ranger <- ranger::ranger(BUILDINGID~., data = trainingData[,c(predictors_train,"BUILDINGID")])
+Building_ModelTop3_ranger <- ranger::ranger(BUILDINGID~., data = trainingData[,c(predictors_train)])
 
-#### Accuracy: 0.97, Kappa: 0.95 p-value < 2.2e-16
+###
 Building_ModelTop3_ranger_cm_train <- confusionMatrix(trainingData$BUILDINGID,Building_ModelTop3_ranger$predictions)
 
 Building_ModelTop3_ranger_val_pred <- predict(Building_ModelTop3_ranger,validationData[,c(predictors_validation)])
 
-#### Accuracy: 0.96, Kappa: 0.93, p-value: 2.023e-5
+###
 Building_ModelTop3_ranger_cm_val   <- confusionMatrix(validationData$BUILDINGID,Building_ModelTop3_ranger_val_pred$predictions)
 
 metrics_b[nrow(metrics_b)+1,] <- c(Building_ModelTop3_ranger_cm_train$overall[1:2],"Top3Waps","Training")
 metrics_b[nrow(metrics_b)+1,] <- c(Building_ModelTop3_ranger_cm_val$overall[1:2],"Top3Waps","Validation")
 
+metrics_b[,c(1,2)] <- mapply(as.numeric,metrics_b[,c(1,2)])
+
+#### Plotting error metrics for building
+ggplot(metrics_b,aes(x=Set,y=Accuracy,fill=Set)) + geom_col() + facet_wrap(~Model) +
+  ggtitle("Accuracy of models for predicting building ID")
+ggplot(metrics_b,aes(x=Set,y=Kappa,fill=Set)) + geom_col() + facet_wrap(~Model) +
+  ggtitle("Kappa of models for predicting building ID") 
+  
 ####
 set.seed(123) 
 
@@ -116,6 +118,13 @@ BF_ModelTop3_ranger_cm_val   <- confusionMatrix(validationData$BUILDINGID_FLOOR,
 metrics_bf[nrow(metrics_bf)+1,] <- c(BF_ModelTop3_ranger_cm_train$overall[1:2],"Top3Waps","Training")
 metrics_bf[nrow(metrics_bf)+1,] <- c(BF_ModelTop3_ranger_cm_val$overall[1:2],"Top3Waps","Validation")
 
+#### Plotting error metrics for building-floor    
+metrics_bf[,c(1,2)] <- mapply(as.numeric,metrics_bf[,c(1,2)])
+ggplot(metrics_bf,aes(x=Set,y=Accuracy,fill=Set)) + geom_col() + facet_wrap(~Model) +
+  ggtitle("Accuracy of models for predicting building-floor")
+ggplot(metrics_bf,aes(x=Set,y=Kappa,fill=Set)) + geom_col() + facet_wrap(~Model) +
+  ggtitle("Kappa of models for predicting building-floor") 
+
 #### Ignacio: In order to create models specific for each building, you should
 #### use the WAPS and the predicted building. 
 
@@ -128,12 +137,12 @@ set.seed(123)
 
 Latitude_Model <- ranger(LATITUDE~., data = trainingData[,c(WAPs,"LATITUDE")])
 
-#### RMSE: 19.0 (meters), Rsquared: 0.92, MAE: 10.9 (meters)
+### 
 Latitude_Model_pred_train_metrics <- postResample(Latitude_Model$predictions, trainingData$LATITUDE)
 
 Latitude_Model_pred_val <- predict(Latitude_Model, validationData[,c(WAPs)])
 
-#### RMSE: 17.4 (meters), Rsquared: 0.94, MAE: 10.6 (meters)
+### 
 Latitude_Model_pred_val_metrics <- postResample(Latitude_Model_pred_val$predictions, validationData$LATITUDE)
 
 metrics_lat[nrow(metrics_lat)+1,] <- c(Latitude_Model_pred_train_metrics[1:3],"AllWaps","Training")
@@ -151,12 +160,11 @@ set.seed(123)
 
 Longitude_Model <- ranger(LONGITUDE~., data = trainingData[,c(WAPs,"LONGITUDE")])
 
-#### RMSE: 27.6 (meters), Rsquared: 0.95, MAE: 14.0 (meters)
+###
 Longitude_Model_metrics_train <- postResample(Longitude_Model$predictions, trainingData$LONGITUDE)
 
 Longitude_Model_pred_val <- predict(Longitude_Model,validationData[,c(WAPs)])
 
-#### RMSE: 19.1 (meters), Rsquared: 0.98, MAE: 11.9 (meters)
 Longitude_Model_metrics_val <-postResample(Longitude_Model_train_metrics_pred_val$predictions,validationData$LONGITUDE)
 
 #lon errors
@@ -167,66 +175,40 @@ metrics_lon[nrow(metrics_lon)+1,] <- c(Longitude_Model_metrics_val[1:3],"AllWaps
 pabserror_split(Longitude_Model_pred_val$predictions,validationData$LONGITUDE,
                 validationData$BUILDINGID,"LONGITUDE")
 
-#### Reading the input file of the blind dataset:
-
-current_folder <- dirname(rstudioapi::getSourceEditorContext()$path)
-file <- dlgInput("Please enter the name of the blind dataset file: ", Sys.info()["user"])$res
-full <- paste(current_folder,"/",file,sep = "")
-
-if (file.exists(full)) {
-  blindData <- read_csv(full)
-}else{
-  while(file.exists(full)==FALSE) {
-    full <- dlgInput("The typed file doesn't exist, please enter the correct name for the file: ", Sys.info()["user"])$res
-  }
-  blindData <- read_csv(full)
-}
-
-blindData <- read_csv(full)
-
-#### Preprocessing and feature engenieering of the blind dataset.
-
-blindData <- drop_allna_cols(drop_allna_rows(preproc(blindData)))
-blindData <- blindData[,c(WAPs)]
-blindData <- replace_values(blindData)
-
-HighestWap_blind <- names(blindData)[apply(blindData[,c(WAPs)], 1, which.max)]
-
-blindData$Top3Waps <- apply(blindgData[,c(WAPs)], 1, function(x) 
-  paste(names(head(sort(x, decreasing = TRUE), 3)), collapse = " "))
-
-blindData <- separate(blindData, Top3Waps, c("TopWap1", "TopWap2","TopWap3"))
-
-blindData$TopWap1 <- factor(blindData$TopWap1, levels = WAPs)
-blindData$TopWap2 <- factor(blindData$TopWap2, levels = WAPs)
-blindData$TopWap3 <- factor(blindData$TopWap3, levels = WAPs)
-
-#### Applying the models to the blind dataset.
-
-get_floor <- function(vec) {
-  d <- mapply(function(x) unlist(strsplit(x, "_"))[2],vec)
-  return(d)
-}  
-
-BF_allwaps_pred <- predict(BF_Model_allwaps,blindData[,c(WAPs)])
-BF_Top3_pred    <- predict(BF_ModelTop3_ranger,blindData[,c(WAPs)])
-
-BF_allwaps <- get_floor(BF_allwaps_pred$predictions)
-BF_Top3    <- get_floor(BF_Top3_pred$predictions)
-
-Pred_Lat <- predict(Latitude_Model,blindData[,c(WAPs)])
-Pred_Lon <- predict(Longitude_Model,blindData[,c(WAPs)])
-
-results_allwaps <- data.frame(matrix(ncol = 3, nrow = 0))
-results_allwaps[,ncol(results_allwaps)+1] <- Pred_Lat
-results_allwaps[,ncol(results_allwaps)+1] <- Pred_Lon
-results_allwaps[,ncol(results_allwaps)+1] <- BF_allwaps
-
-results_Top3 <- data.frame(matrix(ncol = 3, nrow = 0))
-results_Top3[,ncol(results_Top3)+1] <- Pred_Lat
-results_Top3[,ncol(results_Top3)+1] <- Pred_Lon
-results_Top3[,ncol(results_Top3)+1] <- BF_Top3
-
-#### Saving results files
-write.csv(results_allwaps, file = "all_waps.csv", row.names = FALSE)
-write.csv(results_Top3, file = "top3.csv", row.names = FALSE)
+#### TO DO: Hi Ferran, I made a lot of cleanup of your code. I removed tens of copies 
+# of the original dataset. You need to avoid creating so many copies of the original
+# dataframe in order to save memory. Otherwise you can run in troubles. 
+# If you don't need all the data to creatye model, simply subset the data you submit
+# for model training. 
+#
+# On the other hand: Your scripts, were a crazy compilation of models to get the
+# best performance. Is best to have only a few ones (as you can see I deleted 
+# many of your models), and try to undersand the most of the them.
+# You didn't make any ERROR ANALISYS which is one of the main 
+# goals of this task. For example, I missed a 3D plot of locations whe the buildin ID
+# was correctly/incorrectly predicted. The same as well for thre building-floor.
+# It would be nice to have also plots showing differences between models. Are the
+# models making mistakes in the same place or not? If so, what it tells you about
+# the data?
+#
+# You have two scripts. On a first sigth, one is for preprocessing the data and
+# the other to generate models. However, in fact that was not the case. In the
+# first script you included some basic models. Try to refactor your code in order
+# to put preprocessing in one script and the model generation in other.
+#
+# In addition, the code related with the blind dataset, should be separated from 
+# the main code. That's included on another script which hasn't been tested
+# deliberatelly in order to  give you some homework.
+#
+# Remember to embed repetitive pieces of code in a single function, which you can use
+# later. I gave you lots of examples in your code as (drop_allna_rows, drop_allna_cols,
+# ...) This sort of things are going to be used in every dataset. Therefore they 
+# are good candidates to be placed inside a function. Other examples can be for 
+# error reporting. 
+# If you have problems writing your own functions, practise, practise, and practise.
+# When writing a function, ask yourselve what do you want to do. This will tell you
+# what need to be your function arguments and what it will output. If you want,
+# do a concrete example, and then replace the names of the inputs by something generic.
+#
+# Also, try to load all the libraries from the beggining, specially when your second
+# script uses variables generated by a previous one.

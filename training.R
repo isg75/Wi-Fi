@@ -3,7 +3,8 @@ if ("pacman" %in% rownames(installed.packages()) == FALSE) {
   install.packages("pacman")
 } else {
     pacman::p_load(readr,dplyr,magrittr,lubridate,ggplot2,plotly,reshape2,tidyr,
-                   caret,stringr,mime)
+                   caret,stringr,mime,
+                   ranger,e1071,gridExtra,tidyverse,svDialogs,rstudioapi)
 }
 
 
